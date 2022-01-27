@@ -1,15 +1,15 @@
-use std::error::Error;
 // Realtivistic DCGAN.
 // https://github.com/AlexiaJM/RelativisticGAN
 //
 // TODO: override the initializations if this does not converge well.
-use tch::{kind, nn, nn::OptimizerConfig, Device, Kind, Tensor};
+use std::error::Error;
+use tch::{nn, nn::OptimizerConfig as _, Device, Kind, Tensor};
 
 const IMG_SIZE: i64 = 64;
 const LATENT_DIM: i64 = 128;
 const BATCH_SIZE: i64 = 32;
 const LEARNING_RATE: f64 = 1e-4;
-const BATCHES: i64 = 100000000;
+const BATCHES: u64 = 100_000_000;
 
 fn tr2d(p: nn::Path, c_in: i64, c_out: i64, padding: i64, stride: i64) -> nn::ConvTranspose2D {
     let cfg = nn::ConvTransposeConfig {
@@ -18,7 +18,7 @@ fn tr2d(p: nn::Path, c_in: i64, c_out: i64, padding: i64, stride: i64) -> nn::Co
         bias: false,
         ..Default::default()
     };
-    nn::conv_transpose2d(&p, c_in, c_out, 4, cfg)
+    nn::conv_transpose2d(p, c_in, c_out, 4, cfg)
 }
 
 fn conv2d(p: nn::Path, c_in: i64, c_out: i64, padding: i64, stride: i64) -> nn::Conv2D {
@@ -28,45 +28,45 @@ fn conv2d(p: nn::Path, c_in: i64, c_out: i64, padding: i64, stride: i64) -> nn::
         bias: false,
         ..Default::default()
     };
-    nn::conv2d(&p, c_in, c_out, 4, cfg)
+    nn::conv2d(p, c_in, c_out, 4, cfg)
 }
 
-fn generator(p: nn::Path) -> impl nn::ModuleT {
+fn generator(root: &nn::Path) -> impl nn::ModuleT {
     nn::seq_t()
-        .add(tr2d(&p / "tr1", LATENT_DIM, 1024, 0, 1))
-        .add(nn::batch_norm2d(&p / "bn1", 1024, Default::default()))
-        .add_fn(|xs| xs.relu())
-        .add(tr2d(&p / "tr2", 1024, 512, 1, 2))
-        .add(nn::batch_norm2d(&p / "bn2", 512, Default::default()))
-        .add_fn(|xs| xs.relu())
-        .add(tr2d(&p / "tr3", 512, 256, 1, 2))
-        .add(nn::batch_norm2d(&p / "bn3", 256, Default::default()))
-        .add_fn(|xs| xs.relu())
-        .add(tr2d(&p / "tr4", 256, 128, 1, 2))
-        .add(nn::batch_norm2d(&p / "bn4", 128, Default::default()))
-        .add_fn(|xs| xs.relu())
-        .add(tr2d(&p / "tr5", 128, 3, 1, 2))
-        .add_fn(|xs| xs.tanh())
+        .add(tr2d(root / "tr1", LATENT_DIM, 1024, 0, 1))
+        .add(nn::batch_norm2d(root / "bn1", 1024, Default::default()))
+        .add_fn(Tensor::relu)
+        .add(tr2d(root / "tr2", 1024, 512, 1, 2))
+        .add(nn::batch_norm2d(root / "bn2", 512, Default::default()))
+        .add_fn(Tensor::relu)
+        .add(tr2d(root / "tr3", 512, 256, 1, 2))
+        .add(nn::batch_norm2d(root / "bn3", 256, Default::default()))
+        .add_fn(Tensor::relu)
+        .add(tr2d(root / "tr4", 256, 128, 1, 2))
+        .add(nn::batch_norm2d(root / "bn4", 128, Default::default()))
+        .add_fn(Tensor::relu)
+        .add(tr2d(root / "tr5", 128, 3, 1, 2))
+        .add_fn(Tensor::tanh)
 }
 
-fn leaky_relu(xs: &Tensor) -> Tensor {
-    xs.maximum(&(xs * 0.2))
+fn leaky_relu(v: f64) -> impl Fn(&Tensor) -> Tensor + Send + 'static {
+    move |x| x.maximum(&(x * v))
 }
 
-fn discriminator(p: nn::Path) -> impl nn::ModuleT {
+fn discriminator(root: &nn::Path) -> impl nn::ModuleT {
     nn::seq_t()
-        .add(conv2d(&p / "conv1", 3, 128, 1, 2))
-        .add_fn(leaky_relu)
-        .add(conv2d(&p / "conv2", 128, 256, 1, 2))
-        .add(nn::batch_norm2d(&p / "bn2", 256, Default::default()))
-        .add_fn(leaky_relu)
-        .add(conv2d(&p / "conv3", 256, 512, 1, 2))
-        .add(nn::batch_norm2d(&p / "bn3", 512, Default::default()))
-        .add_fn(leaky_relu)
-        .add(conv2d(&p / "conv4", 512, 1024, 1, 2))
-        .add(nn::batch_norm2d(&p / "bn4", 1024, Default::default()))
-        .add_fn(leaky_relu)
-        .add(conv2d(&p / "conv5", 1024, 1, 0, 1))
+        .add(conv2d(root / "conv1", 3, 128, 1, 2))
+        .add_fn(leaky_relu(0.2))
+        .add(conv2d(root / "conv2", 128, 256, 1, 2))
+        .add(nn::batch_norm2d(root / "bn2", 256, Default::default()))
+        .add_fn(leaky_relu(0.2))
+        .add(conv2d(root / "conv3", 256, 512, 1, 2))
+        .add(nn::batch_norm2d(root / "bn3", 512, Default::default()))
+        .add_fn(leaky_relu(0.2))
+        .add(conv2d(root / "conv4", 512, 1024, 1, 2))
+        .add(nn::batch_norm2d(root / "bn4", 1024, Default::default()))
+        .add_fn(leaky_relu(0.2))
+        .add(conv2d(root / "conv5", 1024, 1, 0, 1))
 }
 
 fn mse_loss(x: &Tensor, y: &Tensor) -> Tensor {
@@ -77,7 +77,7 @@ fn mse_loss(x: &Tensor, y: &Tensor) -> Tensor {
 // Generate a 2D matrix of images from a tensor with multiple images.
 fn image_matrix(imgs: &Tensor, sz: i64) -> Tensor {
     let imgs = ((imgs + 1.) * 127.5).clamp(0., 255.).to_kind(Kind::Uint8);
-    let mut ys: Vec<Tensor> = vec![];
+    let mut ys = Vec::new();
     for i in 0..sz {
         ys.push(Tensor::cat(
             &(0..sz)
@@ -91,7 +91,7 @@ fn image_matrix(imgs: &Tensor, sz: i64) -> Tensor {
 
 pub fn main() -> Result<(), Box<dyn Error>> {
     let device = Device::cuda_if_available();
-    let args: Vec<_> = std::env::args().collect();
+    let args = std::env::args().collect::<Vec<_>>();
     let image_dir = match args.as_slice() {
         [_, d] => d.to_owned(),
         _ => panic!("usage: main image-dataset-dir"),
@@ -101,7 +101,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     let train_size = images.size()[0];
 
     let random_batch_images = || {
-        let index = Tensor::randint(train_size, &[BATCH_SIZE], kind::INT64_CPU);
+        let index = Tensor::randint(train_size, &[BATCH_SIZE], (Kind::Int64, device));
         images
             .index_select(0, &index)
             .to_device(device)
@@ -109,17 +109,15 @@ pub fn main() -> Result<(), Box<dyn Error>> {
             / 127.5
             - 1.
     };
-    let rand_latent = || {
-        (Tensor::rand(&[BATCH_SIZE, LATENT_DIM, 1, 1], kind::FLOAT_CPU) * 2.0 - 1.0)
-            .to_device(device)
-    };
+    let rand_latent =
+        || Tensor::rand(&[BATCH_SIZE, LATENT_DIM, 1, 1], (Kind::Float, device)) * 2.0 - 1.0;
 
     let mut generator_vs = nn::VarStore::new(device);
-    let generator = generator(generator_vs.root());
+    let generator = generator(&generator_vs.root());
     let mut opt_g = nn::adam(0.5, 0.999, 0.).build(&generator_vs, LEARNING_RATE)?;
 
     let mut discriminator_vs = nn::VarStore::new(device);
-    let discriminator = discriminator(discriminator_vs.root());
+    let discriminator = discriminator(&discriminator_vs.root());
     let mut opt_d = nn::adam(0.5, 0.999, 0.).build(&discriminator_vs, LEARNING_RATE)?;
 
     let fixed_noise = rand_latent();
