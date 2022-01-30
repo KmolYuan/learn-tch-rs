@@ -102,9 +102,8 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 
     let random_batch_images = || {
         let index = Tensor::randint(train_size, &[BATCH_SIZE], (Kind::Int64, device));
-        images
+        images.to_device(device)
             .index_select(0, &index)
-            .to_device(device)
             .to_kind(Kind::Float)
             / 127.5
             - 1.
