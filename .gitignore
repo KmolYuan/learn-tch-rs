@@ -1,5 +1,7 @@
 /.idea/
 /target/
 /images/
+/model/
+/demo/
 *.png
 *.lock
