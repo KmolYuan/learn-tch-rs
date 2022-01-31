@@ -27,6 +27,9 @@ enum Subcommand {
         model: PathBuf,
         /// Demo path
         demo: PathBuf,
+        /// Total epoch
+        #[clap(long, default_value = "10000")]
+        epoch: u64,
     },
     /// Evaluate mode
     Eval {
@@ -44,7 +47,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             dataset,
             model,
             demo,
-        } => train::train(dataset, model, demo),
+            epoch,
+        } => train::train(dataset, model, demo, epoch),
         Subcommand::Eval { gen_path, demo } => eval::eval(gen_path, demo),
     }
 }

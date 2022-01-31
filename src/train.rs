@@ -6,9 +6,13 @@ use tch::{nn, nn::OptimizerConfig as _, Device, Kind, Tensor};
 
 const BATCH_SIZE: i64 = 32;
 const LEARNING_RATE: f64 = 1e-4;
-const EPOCH: u64 = 100_000_000;
 
-pub fn train(dataset: PathBuf, model: PathBuf, demo: PathBuf) -> Result<(), Box<dyn Error>> {
+pub fn train(
+    dataset: PathBuf,
+    model: PathBuf,
+    demo: PathBuf,
+    epoch: u64,
+) -> Result<(), Box<dyn Error>> {
     let device = Device::cuda_if_available();
     let images = tch::vision::image::load_dir(dataset, IMG_SIZE, IMG_SIZE)?;
     println!("loaded dataset: {:?}", images);
@@ -38,9 +42,9 @@ pub fn train(dataset: PathBuf, model: PathBuf, demo: PathBuf) -> Result<(), Box<
     let discriminator = model::discriminator(&discriminator_vs.root());
     let mut opt_d = nn::adam(0.5, 0.999, 0.).build(&discriminator_vs, LEARNING_RATE)?;
 
-    let pb = indicatif::ProgressBar::new(EPOCH);
+    let pb = indicatif::ProgressBar::new(epoch);
     let demo_noise = model::rand_latent(BATCH_SIZE, device);
-    for index in 0..EPOCH {
+    for index in 0..epoch {
         pb.set_position(index);
         discriminator_vs.unfreeze();
         generator_vs.freeze();
